@@ -38,6 +38,9 @@ PRODUCT_SCHEMA_SQL = "product.sql"
 GROUP_SCHEMA_SQL = "chat_group.sql"
 GROUP_MEMBER_SCHEMA_SQL = "group_member.sql"
 GROUP_MESSAGE_SCHEMA_SQL = "group_message.sql"
+# --- Facebook platform (fork addition) ---
+FRIENDSHIP_SCHEMA_SQL = "friendship.sql"
+REACTION_SCHEMA_SQL = "reaction.sql"
 
 TABLE_NAMES = {
     "user",
@@ -56,6 +59,8 @@ TABLE_NAMES = {
     "group",
     "group_member",
     "group_message",
+    "friendship",
+    "reaction",
 }
 
 
@@ -191,6 +196,19 @@ def create_db(db_path: str | None = None):
         with open(group_message_sql_path, "r") as sql_file:
             group_message_sql_script = sql_file.read()
         cursor.executescript(group_message_sql_script)
+
+        # --- Facebook platform (fork addition) ---
+        # Read and execute the friendship table SQL script:
+        friendship_sql_path = osp.join(schema_dir, FRIENDSHIP_SCHEMA_SQL)
+        with open(friendship_sql_path, "r") as sql_file:
+            friendship_sql_script = sql_file.read()
+        cursor.executescript(friendship_sql_script)
+
+        # Read and execute the reaction table SQL script:
+        reaction_sql_path = osp.join(schema_dir, REACTION_SCHEMA_SQL)
+        with open(reaction_sql_path, "r") as sql_file:
+            reaction_sql_script = sql_file.read()
+        cursor.executescript(reaction_sql_script)
 
         # Commit the changes:
         conn.commit()

@@ -57,6 +57,11 @@ class SocialAction:
                 self.send_to_group,
                 self.create_group,
                 self.listen_from_group,
+                # --- Facebook platform (fork addition) ---
+                self.send_friend_request,
+                self.accept_friend_request,
+                self.unfriend,
+                self.react_post,
             ]
         ]
 
@@ -756,3 +761,59 @@ class SocialAction:
         r"""Listen messages from groups"""
         return await self.perform_action(self.agent_id,
                                          ActionType.LISTEN_FROM_GROUP.value)
+
+    # ================================================================
+    # Facebook platform actions (fork addition)
+    # ================================================================
+    async def send_friend_request(self, addressee_id: int):
+        r"""Send a friend request to another user (Facebook).
+
+        Args:
+            addressee_id (int): The user ID to send a friend request to.
+
+        Returns:
+            dict: {"success": True, "friendship_id": int} on success, or
+                {"success": False, "error": str} on failure.
+        """
+        return await self.perform_action(
+            addressee_id, ActionType.SEND_FRIEND_REQUEST.value)
+
+    async def accept_friend_request(self, requester_id: int):
+        r"""Accept a pending friend request (Facebook).
+
+        Args:
+            requester_id (int): The user ID whose pending request to accept.
+
+        Returns:
+            dict: {"success": True, "friendship_id": int} on success, or
+                {"success": False, "error": str} on failure.
+        """
+        return await self.perform_action(
+            requester_id, ActionType.ACCEPT_FRIEND_REQUEST.value)
+
+    async def unfriend(self, other_id: int):
+        r"""Remove an existing friendship (Facebook).
+
+        Args:
+            other_id (int): The user ID to unfriend.
+
+        Returns:
+            dict: {"success": True} on success, or {"success": False,
+                "error": str} on failure.
+        """
+        return await self.perform_action(other_id, ActionType.UNFRIEND.value)
+
+    async def react_post(self, post_id: int, reaction_type: str):
+        r"""React to a post with a typed reaction (Facebook).
+
+        Args:
+            post_id (int): The post to react to.
+            reaction_type (str): One of "like", "love", "haha", "wow",
+                "sad", "angry".
+
+        Returns:
+            dict: {"success": True, "reaction_id": int} on success, or
+                {"success": False, "error": str} on failure.
+        """
+        return await self.perform_action((post_id, reaction_type),
+                                         ActionType.REACT_POST.value)

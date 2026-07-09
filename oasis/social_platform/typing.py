@@ -47,6 +47,11 @@ class ActionType(Enum):
     SEND_TO_GROUP = "send_to_group"
     CREATE_GROUP = "create_group"
     LISTEN_FROM_GROUP = "listen_from_group"
+    # --- Facebook platform (fork addition) ---
+    SEND_FRIEND_REQUEST = "send_friend_request"
+    ACCEPT_FRIEND_REQUEST = "accept_friend_request"
+    UNFRIEND = "unfriend"
+    REACT_POST = "react_post"
 
     @classmethod
     def get_default_twitter_actions(cls):
@@ -77,14 +82,36 @@ class ActionType(Enum):
             cls.MUTE,
         ]
 
+    @classmethod
+    def get_default_facebook_actions(cls):
+        return [
+            cls.CREATE_POST,
+            cls.REACT_POST,
+            cls.CREATE_COMMENT,
+            cls.LIKE_COMMENT,
+            cls.SEND_FRIEND_REQUEST,
+            cls.ACCEPT_FRIEND_REQUEST,
+            cls.UNFRIEND,
+            cls.CREATE_GROUP,
+            cls.JOIN_GROUP,
+            cls.LEAVE_GROUP,
+            cls.REPORT_POST,
+            cls.SEARCH_POSTS,
+            cls.SEARCH_USER,
+            cls.REFRESH,
+            cls.DO_NOTHING,
+        ]
+
 
 class RecsysType(Enum):
     TWITTER = "twitter"
     TWHIN = "twhin-bert"
     REDDIT = "reddit"
     RANDOM = "random"
+    FACEBOOK = "facebook"
 
 
 class DefaultPlatformType(Enum):
     TWITTER = "twitter"
     REDDIT = "reddit"
+    FACEBOOK = "facebook"

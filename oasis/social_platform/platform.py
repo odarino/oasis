@@ -28,7 +28,8 @@ from oasis.social_platform.database import (create_db,
                                             fetch_rec_table_as_matrix,
                                             fetch_table_from_db)
 from oasis.social_platform.platform_utils import PlatformUtils
-from oasis.social_platform.recsys import (rec_sys_personalized_twh,
+from oasis.social_platform.recsys import (rec_sys_facebook,
+                                          rec_sys_personalized_twh,
                                           rec_sys_personalized_with_trace,
                                           rec_sys_random, rec_sys_reddit)
 from oasis.social_platform.typing import ActionType, RecsysType
@@ -376,6 +377,12 @@ class Platform:
         elif self.recsys_type == RecsysType.REDDIT:
             new_rec_matrix = rec_sys_reddit(post_table, rec_matrix,
                                             self.max_rec_post_len)
+        elif self.recsys_type == RecsysType.FACEBOOK:
+            # Facebook feed: friend-affinity weighted (fork addition).
+            friendship_table = fetch_table_from_db(self.db_cursor, "friendship")
+            new_rec_matrix = rec_sys_facebook(user_table, post_table,
+                                              trace_table, friendship_table,
+                                              rec_matrix, self.max_rec_post_len)
         else:
             raise ValueError("Unsupported recommendation system type, please "
                              "check the `RecsysType`.")
@@ -1638,5 +1645,139 @@ class Platform:
                 "joined_groups": joined_group_ids,
                 "messages": messages
             }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # ================================================================
+    # Facebook platform actions (fork addition)
+    # NOTE: These are functional skeletons. Counters/denormalized fields,
+    # notifications and edge-case validation are marked with TODO.
+    # ================================================================
+    def _fb_current_time(self):
+        if self.recsys_type == RecsysType.REDDIT:
+            return self.sandbox_clock.time_transfer(datetime.now(),
+                                                    self.start_time)
+        return self.sandbox_clock.get_time_step()
+
+    async def send_friend_request(self, agent_id: int, addressee_id: int):
+        current_time = self._fb_current_time()
+        try:
+            user_id = agent_id
+            if user_id == addressee_id:
+                return {"success": False, "error": "Cannot friend yourself."}
+            # Reject if an active relationship already exists in either
+            # direction (pending or accepted).
+            check_query = (
+                "SELECT friendship_id, status FROM friendship WHERE "
+                "(requester_id = ? AND addressee_id = ?) OR "
+                "(requester_id = ? AND addressee_id = ?)")
+            self.pl_utils._execute_db_command(
+                check_query, (user_id, addressee_id, addressee_id, user_id))
+            if self.db_cursor.fetchone():
+                return {
+                    "success": False,
+                    "error": "Friendship or pending request already exists."
+                }
+            insert_query = (
+                "INSERT INTO friendship (requester_id, addressee_id, status, "
+                "created_at) VALUES (?, ?, 'pending', ?)")
+            self.pl_utils._execute_db_command(
+                insert_query, (user_id, addressee_id, current_time),
+                commit=True)
+            friendship_id = self.db_cursor.lastrowid
+            action_info = {"friendship_id": friendship_id,
+                           "addressee_id": addressee_id}
+            self.pl_utils._record_trace(
+                user_id, ActionType.SEND_FRIEND_REQUEST.value, action_info,
+                current_time)
+            return {"success": True, "friendship_id": friendship_id}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def accept_friend_request(self, agent_id: int, requester_id: int):
+        current_time = self._fb_current_time()
+        try:
+            user_id = agent_id
+            # The agent accepting must be the addressee of a pending request.
+            check_query = (
+                "SELECT friendship_id FROM friendship WHERE requester_id = ? "
+                "AND addressee_id = ? AND status = 'pending'")
+            self.pl_utils._execute_db_command(check_query,
+                                              (requester_id, user_id))
+            row = self.db_cursor.fetchone()
+            if not row:
+                return {"success": False,
+                        "error": "No pending request to accept."}
+            friendship_id = row[0]
+            update_query = (
+                "UPDATE friendship SET status = 'accepted', accepted_at = ? "
+                "WHERE friendship_id = ?")
+            self.pl_utils._execute_db_command(
+                update_query, (current_time, friendship_id), commit=True)
+            # TODO: maintain a denormalized num_friends counter on user if the
+            # recsys/reporting needs it (mirrors num_followers on follow()).
+            action_info = {"friendship_id": friendship_id,
+                           "requester_id": requester_id}
+            self.pl_utils._record_trace(
+                user_id, ActionType.ACCEPT_FRIEND_REQUEST.value, action_info,
+                current_time)
+            return {"success": True, "friendship_id": friendship_id}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def unfriend(self, agent_id: int, other_id: int):
+        current_time = self._fb_current_time()
+        try:
+            user_id = agent_id
+            delete_query = (
+                "DELETE FROM friendship WHERE "
+                "((requester_id = ? AND addressee_id = ?) OR "
+                "(requester_id = ? AND addressee_id = ?))")
+            self.pl_utils._execute_db_command(
+                delete_query, (user_id, other_id, other_id, user_id),
+                commit=True)
+            if self.db_cursor.rowcount == 0:
+                return {"success": False, "error": "No friendship to remove."}
+            action_info = {"other_id": other_id}
+            self.pl_utils._record_trace(user_id, ActionType.UNFRIEND.value,
+                                        action_info, current_time)
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def react_post(self, agent_id: int, react_message: tuple):
+        r"""Add or change a typed reaction (like/love/haha/wow/sad/angry)."""
+        current_time = self._fb_current_time()
+        try:
+            user_id = agent_id
+            post_id, reaction_type = react_message
+            valid = {"like", "love", "haha", "wow", "sad", "angry"}
+            if reaction_type not in valid:
+                return {"success": False,
+                        "error": f"Invalid reaction_type: {reaction_type}"}
+            # Upsert: one reaction per (user, post); changing it updates the row.
+            check_query = ("SELECT reaction_id FROM reaction WHERE user_id = ? "
+                           "AND post_id = ?")
+            self.pl_utils._execute_db_command(check_query, (user_id, post_id))
+            row = self.db_cursor.fetchone()
+            if row:
+                self.pl_utils._execute_db_command(
+                    "UPDATE reaction SET reaction_type = ?, created_at = ? "
+                    "WHERE reaction_id = ?",
+                    (reaction_type, current_time, row[0]), commit=True)
+                reaction_id = row[0]
+            else:
+                self.pl_utils._execute_db_command(
+                    "INSERT INTO reaction (user_id, post_id, reaction_type, "
+                    "created_at) VALUES (?, ?, ?, ?)",
+                    (user_id, post_id, reaction_type, current_time),
+                    commit=True)
+                reaction_id = self.db_cursor.lastrowid
+            # TODO: keep post.num_likes (or a per-type breakdown) in sync so the
+            # recsys/report layer can rank by reactions.
+            action_info = {"post_id": post_id, "reaction_type": reaction_type}
+            self.pl_utils._record_trace(user_id, ActionType.REACT_POST.value,
+                                        action_info, current_time)
+            return {"success": True, "reaction_id": reaction_id}
         except Exception as e:
             return {"success": False, "error": str(e)}

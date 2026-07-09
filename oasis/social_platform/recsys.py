@@ -795,3 +795,37 @@ def rec_sys_personalized_with_trace(
     end_time = time.time()
     print(f'Personalized recommendation time: {end_time - start_time:.6f}s')
     return new_rec_matrix
+
+
+def rec_sys_facebook(
+    user_table: List[Dict[str, Any]],
+    post_table: List[Dict[str, Any]],
+    trace_table: List[Dict[str, Any]],
+    friendship_table: List[Dict[str, Any]],
+    rec_matrix: List[List],
+    max_rec_post_len: int,
+) -> List[List]:
+    r"""Facebook-style feed (fork addition).
+
+    SKELETON: currently delegates to the trace-based personalized recsys so the
+    platform is runnable end-to-end.
+
+    TODO (faithful Facebook feed / EdgeRank-like):
+      1. Build a friend adjacency map from `friendship_table` rows whose
+         status == 'accepted' (bidirectional).
+      2. Score each candidate post by affinity(viewer, author) *
+         reaction/comment weight * time-decay; strongly uprank posts authored
+         by (or reacted to by) the viewer's friends.
+      3. Fall back to `rec_sys_personalized_with_trace` behavior for users with
+         no friends yet.
+    """
+    # Placeholder friend map so the intended shape is visible to implementers.
+    _friends: Dict[int, set] = {}
+    for row in friendship_table:
+        if row.get("status") == "accepted":
+            a, b = row.get("requester_id"), row.get("addressee_id")
+            _friends.setdefault(a, set()).add(b)
+            _friends.setdefault(b, set()).add(a)
+    # TODO: use `_friends` to weight the ranking below.
+    return rec_sys_personalized_with_trace(user_table, post_table, trace_table,
+                                           rec_matrix, max_rec_post_len)

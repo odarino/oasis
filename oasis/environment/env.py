@@ -96,10 +96,23 @@ class OasisEnv:
                     refresh_rec_post_count=5,
                 )
                 self.platform_type = DefaultPlatformType.REDDIT
+            elif platform == DefaultPlatformType.FACEBOOK:
+                # --- Facebook platform (fork addition) ---
+                self.channel = Channel()
+                self.platform = Platform(
+                    db_path=database_path,
+                    channel=self.channel,
+                    recsys_type="facebook",
+                    following_post_count=3,
+                    max_rec_post_len=20,
+                    refresh_rec_post_count=5,
+                )
+                self.platform_type = DefaultPlatformType.FACEBOOK
             else:
                 raise ValueError(f"Invalid platform: {platform}. Only "
-                                 "DefaultPlatformType.TWITTER or "
-                                 "DefaultPlatformType.REDDIT are supported.")
+                                 "DefaultPlatformType.TWITTER, "
+                                 "DefaultPlatformType.REDDIT or "
+                                 "DefaultPlatformType.FACEBOOK are supported.")
         elif isinstance(platform, Platform):
             if database_path != platform.db_path:
                 env_log.warning("database_path is not the same as the "
@@ -108,6 +121,8 @@ class OasisEnv:
             self.channel = platform.channel
             if platform.recsys_type == RecsysType.REDDIT:
                 self.platform_type = DefaultPlatformType.REDDIT
+            elif platform.recsys_type == RecsysType.FACEBOOK:
+                self.platform_type = DefaultPlatformType.FACEBOOK
             else:
                 self.platform_type = DefaultPlatformType.TWITTER
         else:
