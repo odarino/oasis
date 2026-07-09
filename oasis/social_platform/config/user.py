@@ -42,10 +42,12 @@ class UserInfo:
         return user_info_template.format(**self.profile)
 
     def to_system_message(self) -> str:
-        if self.recsys_type != "reddit":
-            return self.to_twitter_system_message()
-        else:
+        if self.recsys_type == "reddit":
             return self.to_reddit_system_message()
+        elif self.recsys_type == "facebook":
+            return self.to_facebook_system_message()
+        else:
+            return self.to_twitter_system_message()
 
     def to_twitter_system_message(self) -> str:
         name_string = ""
@@ -100,6 +102,41 @@ Please perform actions by tool calling.
         system_content = f"""
 # OBJECTIVE
 You're a Reddit user, and I'll present you with some tweets. After you see the tweets, choose some actions from the following functions.
+
+# SELF-DESCRIPTION
+Your actions should be consistent with your self-description and personality.
+{description}
+
+# RESPONSE METHOD
+Please perform actions by tool calling.
+"""
+        return system_content
+
+    def to_facebook_system_message(self) -> str:
+        # Facebook platform (fork addition). Accepts the reddit-style rich
+        # profile (persona/mbti/gender/age/country) but frames the agent as a
+        # Facebook user connected to friends.
+        name_string = ""
+        description_string = ""
+        if self.name is not None:
+            name_string = f"Your name is {self.name}."
+        description = name_string
+        if (self.profile is not None and "other_info" in self.profile
+                and "user_profile" in self.profile["other_info"]
+                and self.profile["other_info"]["user_profile"] is not None):
+            other = self.profile["other_info"]
+            user_profile = other["user_profile"]
+            description_string = f"Your have profile: {user_profile}."
+            description = f"{name_string}\n{description_string}"
+            for key, label in (("gender", "a {}"), ("age", "{} years old"),
+                               ("mbti", "MBTI type {}"),
+                               ("country", "from {}")):
+                if key in other and other[key] is not None:
+                    description += f" You are {label.format(other[key])}."
+
+        system_content = f"""
+# OBJECTIVE
+You're a Facebook user connected to a network of friends. I'll present you with posts from your feed. After you see them, choose some actions from the following functions. You can post, react (like/love/haha/wow/sad/angry), comment, send/accept friend requests, join groups, or report posts.
 
 # SELF-DESCRIPTION
 Your actions should be consistent with your self-description and personality.

@@ -647,3 +647,49 @@ async def generate_twitter_agent_graph(
 
         agent_graph.add_agent(agent)
     return agent_graph
+
+
+async def generate_facebook_agent_graph(
+    profile_path: str,
+    model: Optional[Union[BaseModelBackend, List[BaseModelBackend],
+                          ModelManager]] = None,
+    available_actions: list[ActionType] = None,
+) -> AgentGraph:
+    r"""Build a Facebook agent graph from a reddit-style JSON profile (fork
+    addition).
+
+    Expects a JSON list of agents with keys: username, bio, persona, and
+    optionally mbti, gender, age, country (same shape as the reddit loader).
+    """
+    agent_graph = AgentGraph()
+    with open(profile_path, "r") as file:
+        agent_info = json.load(file)
+
+    async def process_agent(i):
+        info = agent_info[i]
+        profile = {"nodes": [], "edges": [], "other_info": {}}
+        profile["other_info"]["user_profile"] = info.get("persona")
+        # Optional demographics (rendered by to_facebook_system_message).
+        for key in ("mbti", "gender", "age", "country"):
+            if key in info:
+                profile["other_info"][key] = info[key]
+
+        user_info = UserInfo(
+            name=info["username"],
+            description=info.get("bio", ""),
+            profile=profile,
+            recsys_type="facebook",
+        )
+
+        agent = SocialAgent(
+            agent_id=i,
+            user_info=user_info,
+            agent_graph=agent_graph,
+            model=model,
+            available_actions=available_actions,
+        )
+        agent_graph.add_agent(agent)
+
+    tasks = [process_agent(i) for i in range(len(agent_info))]
+    await asyncio.gather(*tasks)
+    return agent_graph
